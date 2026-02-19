@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() { return request.auth != null; }
+    function getRole() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role; }
+    function isSuperAdmin() { return isAuth() && getRole() == 'superadmin'; }
+    function isEditor() { return isAuth() && (getRole() == 'editor' || isSuperAdmin()); }
+    function isReporter() { return isAuth() && (getRole() == 'reporter' || isEditor()); }
+    function isAdManager() { return isAuth() && (getRole() == 'admanager' || isSuperAdmin()); }
+
+    match /articles/{articleId} {
+      allow read: if resource.data.status == 'published' || isReporter();
+      allow create: if isReporter();
+      allow update: if (isReporter() && resource.data.authorId == request.auth.uid && resource.data.status == 'draft')
+                    || isEditor()
+                    || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /users/{userId} {
+      allow read, write: if request.auth.uid == userId || isSuperAdmin();
+    }
+
+    match /categories/{catId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /ads/{adId} {
+      allow read: if true;
+      allow write: if isAdManager();
+    }
+
+    match /comments/{commentId} {
+      allow read: if resource.data.status == 'approved' || isSuperAdmin();
+      allow create: if isAuth();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /highlights/{highlightId} {
+      allow read: if true;
+      allow write: if isSuperAdmin() || isEditor();
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isSuperAdmin();
+      allow write: if isSuperAdmin();
+    }
+
+    match /youtube/{doc} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /appConfig/{doc} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+  }
+}
